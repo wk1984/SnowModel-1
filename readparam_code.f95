@@ -26,7 +26,7 @@ ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
      &  lat_solar_flag,UTC_flag,iveg_ht_flag,ihrestart_flag,
      &  ihrestart_inc,i_dataassim_loop,tsls_threshold,dz_snow_min,
      &  print_multilayer,multilayer_snowpack,max_layers,
-     &  multilayer_output_fname,izero_snow_date)
+     &  multilayer_output_fname,izero_snow_date,iprint_stream)
 
 c These programs read and process the input parameter data.
 c
@@ -64,6 +64,7 @@ c Put parameter names here:
      &  use_sfc_pressure_obs,calc_subcanopy_met,sfc_sublim_flag
 
       integer nx,ny,max_iter,iprint_inc,icond_flag,irun_corr_factor
+      integer iprint_stream
 
       character*80 topoveg_fname,met_input_fname,topo_ascii_fname,
      &  veg_ascii_fname
@@ -91,7 +92,7 @@ c Working parameters.
       integer k,max_par_lines,i_param_chars,i_value_chars,
      &  icomment_flag,npars,ipar_flag
 
-      parameter (npars=98)
+      parameter (npars=99)
       integer ipar_count(npars)
 
       max_par_lines = 1000
@@ -1084,6 +1085,16 @@ c SNOWMASS MODEL SETUP.
             if (izero_snow_date.lt.10100 .or.
      &        izero_snow_date.gt.999999) then
               print *,'izero_snow_date out of range'
+              stop
+            endif
+          endif
+          
+          if (c_param(1:i_param_chars).eq.'iprint_stream') then
+            ipar_count(99) = 1
+            call char2int(iprint_stream,i_value_chars,c_value,
+     &        c_param(1:i_param_chars))
+            if (iprint_stream.lt.0 .or. iprint_stream.gt.1) then
+              print *, 'iprint_stream should be 1 or 0'
               stop
             endif
           endif

@@ -485,6 +485,12 @@ c Open the MicroMet station data input file.
 
 c Run a check to see whether there are any time slices with no
 c   valid data.
+      print *
+      print *,'Checking for sufficient met forcing data to'
+      print *,'  complete the model simulation.  This may'
+      print *,'  take a while, depending on how big your met'
+      print *,'  input file is.'
+      print *
       call met_data_check(undef,isingle_stn_flag,igrads_metfile,
      &  max_iter,i_tair_flag,i_rh_flag,i_wind_flag,i_prec_flag)
 
@@ -544,7 +550,7 @@ c   For EnBal.
 
 c   For SnowPack.
       if (run_snowpack.eq.1.0 .and. print_snowpack.eq.1.0) then
-        n_recs_out = 18
+        n_recs_out = 16
         open (83,file=snowpack_output_fname,
      &    form='unformatted',access='direct',recl=4*n_recs_out*nx*ny)
       endif
@@ -894,8 +900,10 @@ cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
       double precision xstn_orig(nstns_max),ystn_orig(nstns_max)
       real elev_orig(nstns_max),prec_orig(nstns_max)
       real undef               ! undefined value
+      real elevation_flag
 
       n_notgood_vars = 0
+      elevation_flag = 0.0
 
       do iter=1,max_iter
 
@@ -934,6 +942,11 @@ c Count the good values at this time.
           if (winddir_orig(k).ne.undef) n_good_wdir = n_good_wdir + 1
           if (prec_orig(k).ne.undef) n_good_prec = n_good_prec + 1
 
+          if (elev_orig(k).lt.0.0) then
+            elevation_flag = 1.0
+            print *,'elevation = ',elev_orig(k),'  for stn id = ',idstn
+          endif
+
         enddo
 
 c Check to see whether there are any variables with no valid data
@@ -969,6 +982,15 @@ c   at this time slice.
         print *
         print *,' FOUND TIMES WITH NO VALID MET OBSERVATIONS'
         print *,'NEED TO CORRECT THE PROBLEM BEFORE CONTINUING'
+        stop
+      endif
+
+      if (elevation_flag.eq.1.0) then
+        print *
+        print *,' FOUND A NEGATIVE OR UNDEFINED STATION ELEVATION.'
+        print *,'STATION ELEVATIONS CANNOT BE UNDEFINED, BUT THEY.'
+        print *,'CAN BE NEGATIVE FOR A PLACE LIKE DEATH VALLEY.'
+        print *,'YOU NEED TO CORRECT ANY PROBLEMS BEFORE CONTINUING.'
         stop
       endif
 
@@ -1067,7 +1089,6 @@ cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
       real canopy_int_old(nx_max,ny_max)
       real topo(nx_max,ny_max)
       real sum_sprec(nx_max,ny_max)
-	  
 
       character*18 name1
       character*1 name2

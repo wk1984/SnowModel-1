@@ -194,7 +194,7 @@ cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
       real ro_snowmax,tsls_threshold,dz_snow_min,tslsnowfall,Cp_snow
 
       integer melt_flag(nz_max)
-      real change_layer(nz_max)
+      real change_layer
       real dy_snow(nz_max)
       real swe_lyr(nz_max)
       real ro_layer(nz_max)
@@ -482,8 +482,8 @@ c Do the snowpack and canopy store.
      &  glacier_melt - swesublim + canopy_int_old - canopy_int +
      &  Qcs
 
-      if (abs(w_balance).gt.1.0e-6)
-     &  print*,'water imbalance found, iter =',iter,' ',w_balance
+c      if (abs(w_balance).gt.1.0e-5)
+c     &  print*,'water imbalance found, iter =',iter,' ',w_balance
 
       return
       end
@@ -532,8 +532,8 @@ c   simulation includes SnowTran-3D.
      &  swe_depth + sum_glacmelt + snow_d_init * ro_snow/ro_water -
      &  sum_sfcsublim
 
-      if (abs(w_balance).gt.1.0e-4)
-     &  print*,'water imbalance found, iter =',iter,' ',w_balance
+c      if (abs(w_balance).gt.1.0e-4)
+c     &  print*,'water imbalance found, iter =',iter,' ',w_balance
 
       return
       end
@@ -600,6 +600,25 @@ c   associated swe depth.
         else
           swesublim = 0.0
         endif
+		
+c JPB ADD - compute sublimation of glacier ice
+c Compute any glacier or permanent snow-field sublimation (m water equiv.).		
+      elseif (vegtype.eq.20.0  .and.  sfc_sublim_flag.eq.1.0) then
+	     if (Qe.lt.0.0) then
+
+c Compute the ice-surface sublimation (m, swe).
+          xLsublim = 2.844e6
+          potsublim = (- dt) * Qe / (ro_water * xLsublim)
+          swesublim = potsublim
+
+c Save a summing array of the static surface snow sublimation.
+          sum_sfcsublim = sum_sfcsublim + swesublim
+		  
+        else
+          swesublim = 0.0
+        endif
+c JPB ADD - compute sublimation of glacier ice
+
       else
         swesublim = 0.0
       endif
@@ -690,11 +709,17 @@ c We have precipitation.
 
 c We have rain.
         if (rain.gt.0.0) then
+		
+c JPB ADD - modify to handle both rain and snow.		
+c Handle the snow precipitation and snow unloading addition.
+          swe_depth = swe_depth + sprec_grnd
+          snow_d_new = ro_water / ro_nsnow * sprec_grnd
+          snow_depth = snow_depth + snow_d_new
+          ro_snow_grid = ro_water * swe_depth / snow_depth
 
-c Rain on snow.  Note that we can also have snow unloading here.
-c   Assume this unloading is wet as rain.
+c Now handle the rain on snow.
           if (snow_depth.gt.0.0) then
-            swe_depth = swe_depth + rain + canopy_unload
+            swe_depth = swe_depth + rain
             ro_snow_grid = swe_depth * ro_water / snow_depth
             if (ro_snow_grid.gt.ro_snowmax) then
               dz_water = snow_depth * (ro_snow_grid - ro_snowmax) /
@@ -703,7 +728,8 @@ c   Assume this unloading is wet as rain.
               swe_depth = snow_depth * ro_snow_grid / ro_water
               runoff = runoff + dz_water
             endif
-
+c JPB ADD - modify to handle both rain and snow.
+			
 c Rain on bare ground.  Assume any unloading is as wet as rain.
           else
             runoff = runoff + rain + canopy_unload

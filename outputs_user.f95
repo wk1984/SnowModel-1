@@ -14,7 +14,8 @@ ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
      &  wbal_subgrid,canopy_unload,sum_qsubl,sum_trans,
      &  sum_unload,sum_glacmelt,glacier_melt,swemelt,
      &  iprint_inc,sfc_pressure,sum_swemelt,albedo,
-     &  icorr_factor_loop,swesublim,vegtype,iter_start)
+     &  icorr_factor_loop,swesublim,vegtype,iter_start,
+     &  iprint_stream)
 
 c This subroutine is available to provide user-defined outputs.
 c   These might be special-case situations, like just writing out
@@ -87,8 +88,10 @@ c Averaging arrays start.
       real swed(nx_max,ny_max)
       real gmlt(nx_max,ny_max)
       real csub(nx_max,ny_max)
+      real subl(nx_max,ny_max)
 	  
       real qmlt(nx_max,ny_max)
+      real wbal(nx_max,ny_max)
 	  
 c Averaging arrays end.
 
@@ -113,9 +116,11 @@ c     character*7 ipoly_num
 
       integer individual_files
       real pi,rad2deg
+      integer iprint_stream
 
       pi = 2.0 * acos(0.0)
       rad2deg = 180.0 / pi
+ 
 
 ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
@@ -129,8 +134,23 @@ c Open individual output files for each variable.
 
       if (iter.eq.iter_start) then
         if (icorr_factor_loop.eq.1) then
-          open (221,file='outputs/wo_assim/tair.gdat',
-     &      form='unformatted',access='direct',recl=4*1*nx*ny)
+          if (iprint_stream.eq.1) then  
+            open (228,file='outputs/wo_assim/prec.dat',
+     &        STATUS='NEW', access='STREAM')
+            open (232,file='outputs/wo_assim/ssub.dat',
+     &        STATUS='NEW', access='STREAM')
+            open (233,file='outputs/wo_assim/roff.dat',
+     &        STATUS='NEW', access='STREAM')
+            open (236,file='outputs/wo_assim/swed.dat',
+     &        STATUS='NEW', access='STREAM')
+            open (241,file='outputs/wo_assim/csub.dat',
+     &        STATUS='NEW', access='STREAM')
+            open (245,file='outputs/wo_assim/wbal.dat',
+     &        STATUS='NEW', access='STREAM')
+          else
+
+c          open (221,file='outputs/wo_assim/tair.gdat',
+c     &      form='unformatted',access='direct',recl=4*1*nx*ny)
 c          open (222,file='outputs/wo_assim/rhxx.gdat',
 c     &      form='unformatted',access='direct',recl=4*1*nx*ny)
 c          open (223,file='outputs/wo_assim/wspd.gdat',
@@ -143,11 +163,8 @@ c          open (226,file='outputs/wo_assim/qlex.gdat',
 c     &      form='unformatted',access='direct',recl=4*1*nx*ny)
 c          open (227,file='outputs/wo_assim/albd.gdat',
 c     &      form='unformatted',access='direct',recl=4*1*nx*ny)
-
-          open (228,file='outputs/wo_assim/prec.gdat',
-     &      STATUS='NEW', access='STREAM')
-c          open (228,file='outputs/wo_assim/prec.gdat',
-c     &      form='unformatted',access='direct',recl=4*1*nx*ny)
+           open (228, file='outputs/wo_assim/prec.gdat',
+     &       form='unformatted',access='direct',recl=4*1*nx*ny)
 c          open (229,file='outputs/wo_assim/rpre.gdat',
 c     &      form='unformatted',access='direct',recl=4*1*nx*ny)
 c          open (230,file='outputs/wo_assim/spre.gdat',
@@ -155,16 +172,16 @@ c     &      form='unformatted',access='direct',recl=4*1*nx*ny)
 c          open (231,file='outputs/wo_assim/smlt.gdat',
 c     &      form='unformatted',access='direct',recl=4*1*nx*ny)
           open (232,file='outputs/wo_assim/ssub.gdat',
-     &      form='unformatted',access='direct',recl=4*1*nx*ny)
+     &       form='unformatted',access='direct',recl=4*1*nx*ny)
           open (233,file='outputs/wo_assim/roff.gdat',
-     &      form='unformatted',access='direct',recl=4*1*nx*ny)
+     &       form='unformatted',access='direct',recl=4*1*nx*ny)
 
 c          open (234,file='outputs/wo_assim/snod.gdat',
 c     &      form='unformatted',access='direct',recl=4*1*nx*ny)
 c          open (235,file='outputs/wo_assim/sden.gdat',
 c     &      form='unformatted',access='direct',recl=4*1*nx*ny)
           open (236,file='outputs/wo_assim/swed.gdat',
-     &      form='unformatted',access='direct',recl=4*1*nx*ny)
+     &       form='unformatted',access='direct',recl=4*1*nx*ny)
 c          open (237,file='outputs/wo_assim/sspr.gdat',
 c     &      form='unformatted',access='direct',recl=4*1*nx*ny)
 c          open (238,file='outputs/wo_assim/ssmt.gdat',
@@ -173,16 +190,15 @@ c          open (239,file='outputs/wo_assim/wdir.gdat',
 c     &      form='unformatted',access='direct',recl=4*1*nx*ny)
 c          open (240,file='outputs/wo_assim/gmlt.gdat',
 c     &      form='unformatted',access='direct',recl=4*1*nx*ny)
-c	      open (241,file='outputs/wo_assim/csub.gdat',
-c     &      form='unformatted',access='direct',recl=4*1*nx*ny)
-c	      open (242,file='outputs/wo_assim/qmlt.gdat',
-c     &      form='unformatted',access='direct',recl=4*1*nx*ny)
-
-c	      open (243,file='outputs/wo_assim/qhxx.gdat',
+          open (241,file='outputs/wo_assim/csub.gdat',
+     &      form='unformatted',access='direct',recl=4*1*nx*ny)
+cc	      open (243,file='outputs/wo_assim/qhxx.gdat',
 c     &      form='unformatted',access='direct',recl=4*1*nx*ny)
 c	      open (244,file='outputs/wo_assim/qexx.gdat',
 c     &      form='unformatted',access='direct',recl=4*1*nx*ny)
-	 
+            open (245,file='outputs/wo_assim/wbal.gdat',
+     &       form='unformatted',access='direct',recl=4*1*nx*ny)
+          endif
         endif
 
         if (icorr_factor_loop.eq.2) then
@@ -234,7 +250,6 @@ c     &      form='unformatted',access='direct',recl=4*1*nx*ny)
 c If you want to save the data every 24-hours, set naverage = 1
 c   If you want to save the data at every time step, without the
 c   averaging, set naverage = 0
-c      naverage = 0
       naverage = 1
 
 c iprint_inc2 = 24 says that you are only going to save the data
@@ -268,6 +283,8 @@ c Sum.
               roff(i,j) = 0.0
               gmlt(i,j) = 0.0
 	          csub(i,j) = 0.0
+	          subl(i,j) = 0.0
+              wbal(i,j) = 0.0
 c End of day.
               snod(i,j) = 0.0
               sden(i,j) = 0.0
@@ -316,6 +333,8 @@ c Sum.
             roff(i,j) = roff(i,j) + runoff(i,j)
             gmlt(i,j) = gmlt(i,j) + glacier_melt(i,j)
 	        csub(i,j) = csub(i,j) + Qcs(i,j)
+		    subl(i,j) = subl(i,j) + wbal_qsubl(i,j)
+		    wbal(i,j) = wbal(i,j) + w_balance(i,j)			
 c End of day.
             snod(i,j) = snow_depth(i,j)
             sden(i,j) = xro_snow(i,j)
@@ -354,6 +373,8 @@ c Sum.
                roff(i,j) = undef
 			   gmlt(i,j) = undef
 			   csub(i,j) = undef
+			   subl(i,j) = undef
+			   wbal(i,j) = undef
 c End of day.
                snod(i,j) = undef
                sden(i,j) = undef
@@ -366,25 +387,24 @@ c End of day.
 
           if (icorr_factor_loop.eq.1) then
 
-            write (221,rec=iter/iprint_inc2) ((tair(i,j),i=1,nx),j=1,ny)
+c            write (221,rec=iter/iprint_inc2) ((tair(i,j),i=1,nx),j=1,ny)
 c            write (222,rec=iter/iprint_inc2) ((rhxx(i,j),i=1,nx),j=1,ny)
 c            write (223,rec=iter/iprint_inc2) ((wspd(i,j),i=1,nx),j=1,ny)
 c            write (224,rec=iter/iprint_inc2) ((qsix(i,j),i=1,nx),j=1,ny)
 c            write (225,rec=iter/iprint_inc2) ((qlix(i,j),i=1,nx),j=1,ny)
 c            write (226,rec=iter/iprint_inc2) ((qlex(i,j),i=1,nx),j=1,ny)
 c            write (227,rec=iter/iprint_inc2) ((albd(i,j),i=1,nx),j=1,ny)
-            
+
             write (228) ((prec(i,j),i=1,nx),j=1,ny)
-c            write (228,rec=iter/iprint_inc2) ((prec(i,j),i=1,nx),j=1,ny)
 c            write (229,rec=iter/iprint_inc2) ((rpre(i,j),i=1,nx),j=1,ny)
 c            write (230,rec=iter/iprint_inc2) ((spre(i,j),i=1,nx),j=1,ny)
 c            write (231,rec=iter/iprint_inc2) ((smlt(i,j),i=1,nx),j=1,ny)
-            write (232,rec=iter/iprint_inc2) ((ssub(i,j),i=1,nx),j=1,ny)
-            write (233,rec=iter/iprint_inc2) ((roff(i,j),i=1,nx),j=1,ny)
+            write (232) ((ssub(i,j),i=1,nx),j=1,ny)
+            write (233) ((roff(i,j),i=1,nx),j=1,ny)
 
-c            write (234,rec=iter/iprint_inc2) ((snod(i,j),i=1,nx),j=1,ny)
-c            write (235,rec=iter/iprint_inc2) ((sden(i,j),i=1,nx),j=1,ny)
-            write (236,rec=iter/iprint_inc2) ((swed(i,j),i=1,nx),j=1,ny)
+c            write (234) ((snod(i,j),i=1,nx),j=1,ny)
+c            write (235) ((sden(i,j),i=1,nx),j=1,ny)
+            write (236) ((swed(i,j),i=1,nx),j=1,ny)
 
 c            write (237,rec=iter/iprint_inc2) ((sspr(i,j),i=1,nx),j=1,ny)
 c            write (238,rec=iter/iprint_inc2) ((ssmt(i,j),i=1,nx),j=1,ny)
@@ -392,8 +412,8 @@ c            write (238,rec=iter/iprint_inc2) ((ssmt(i,j),i=1,nx),j=1,ny)
 c            write (239,rec=iter/iprint_inc2) ((wdir(i,j),i=1,nx),j=1,ny)
 
 c            write (240,rec=iter/iprint_inc2) ((gmlt(i,j),i=1,nx),j=1,ny)
-c            write (241,rec=iter/iprint_inc2) ((csub(i,j),i=1,nx),j=1,ny)
-c            write (242,rec=iter/iprint_inc2) ((qmlt(i,j),i=1,nx),j=1,ny)
+            write (241) ((csub(i,j),i=1,nx),j=1,ny)
+            write (245) ((wbal(i,j),i=1,nx),j=1,ny)
 
           elseif (icorr_factor_loop.eq.2) then
 
@@ -1323,28 +1343,3 @@ c     real undef
 c     real poly(nx_max,ny_max)
 c     real var(nx_max,ny_max)
 c     real ave_poly(max_poly)
-c     real count_poly(max_poly)
-
-c Calculate the average met forcing value for each polygon.
-c     do j=1,ny
-c       do i=1,nx
-c         num_poly = nint(poly(i,j))
-c         if (num_poly.ne.undef)
-c    &      ave_poly(num_poly) = ave_poly(num_poly) + var(i,j)
-c       enddo
-c     enddo
-
-c     do num_poly=1,max_poly
-c       if (count_poly(num_poly).gt.0.0) then
-c         ave_poly(num_poly) = ave_poly(num_poly)/count_poly(num_poly)
-c       endif
-c     enddo
-
-c     return
-c     end
-
-ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-

@@ -1,5 +1,4 @@
 c enbal_code.f
-c 5/23/14 - compute full enbal for PSI cells
 
 cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
@@ -31,7 +30,8 @@ cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
      &  snow_d(nx_max,ny_max),sfc_pressure(nx_max,ny_max)
 
       real snow_z0,veg_z0_tmp,windspd,ht_windobs,undef,
-     &  albedo_snow_forest,albedo_snow_clearing,albedo_glacier
+     &  albedo_snow_forest,albedo_snow_clearing,albedo_glacier,
+     &  count_Tsfc_not_converged
 
       integer i,j,nx,ny,icond_flag,k
 
@@ -44,6 +44,8 @@ cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
       real gamma_z(2)
 
       print *,'   solving the energy balance'
+
+      count_Tsfc_not_converged = 0.0
 
       do j=1,ny
         do i=1,nx
@@ -68,9 +70,26 @@ c   not have to do this (I could pass in subsections of the arrays).
      &      sfc_pressure(i,j),snow_d(i,j),ht_windobs,
      &      icond_flag,albedo(i,j),snow_z0,veg_z0_tmp,vegtype(i,j),
      &      albedo_snow_forest,albedo_snow_clearing,albedo_glacier,
-     &      dy_snow_z,T_old_z,gamma_z,JJ(i,j))
+     &      dy_snow_z,T_old_z,gamma_z,JJ(i,j),count_Tsfc_not_converged)
         enddo
       enddo
+
+c Calculate the % of the grid cells that did not converge during
+c   this time step.
+      count_Tsfc_not_converged = 100.0* count_Tsfc_not_converged /
+     &  real(nx*ny)
+
+c Set the not-converged threshold to be 1% of the grid cells.
+      if (count_Tsfc_not_converged.gt.1.0) then
+        print *,'Over 1% of the grid cells failed to converge'
+        print *,'  in the Tsfc energy balance calculation. This'
+        print *,'  usually means there in a problem with the'
+        print *,'  atmopheric forcing inputs, or that windspd_min'
+        print *,'  in snowmodel.par is set too low; like less than'
+        print *,'  1 m/s.'
+        print *
+        print *,'% Tsfc not converged = ',count_Tsfc_not_converged
+      endif
 
       return
       end
@@ -84,7 +103,7 @@ cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
      &    sfc_pressure,snow_d,ht_windobs,
      &    icond_flag,albedo,snow_z0,veg_z0_tmp,vegtype,
      &    albedo_snow_forest,albedo_snow_clearing,albedo_glacier,
-     &    dy_snow_z,T_old_z,gamma_z,JJ)
+     &    dy_snow_z,T_old_z,gamma_z,JJ,count_Tsfc_not_converged)
 
 c This is the FORTRAN code which implements the surface energy
 c   balance model used in:
@@ -117,7 +136,7 @@ c   slope and aspect on incoming solar radiation.
      &  veg_z0_tmp,vegtype,emiss_sfc,Stef_Boltz,ro_air,Cp,gravity,
      &  xls,xkappa,xLf,Tf,ro_water,Cp_water,ro_ice,z_0,ea,de_h,
      &  stability,es0,undef,albedo_snow_forest,albedo_snow_clearing,
-     &  albedo_glacier
+     &  albedo_glacier,count_Tsfc_not_converged
 
       integer icond_flag,JJ
 
@@ -146,7 +165,8 @@ c Compute the flux contribution due to conduction.
 c Solve the energy balance for the surface temperature.
         CALL SFCTEMP(Tsfc,Tair,Qsi,Qli,ea,albedo,De_h,
      &    sfc_pressure,ht_windobs,windspd,ro_air,Cp,emiss_sfc,
-     &    Stef_Boltz,gravity,xLs,xkappa,z_0,Tf,Qc)
+     &    Stef_Boltz,gravity,xLs,xkappa,z_0,Tf,Qc,
+     &    count_Tsfc_not_converged)
 
 c Make sure the snow surface temperature is <= 0 C.
         CALL MELTTEMP(Tsfc,Tf,snow_d,vegtype)
@@ -255,9 +275,9 @@ c   liquid water in the snowpack.
      &    gravity,xkappa,z_0)
         CALL VAPOR(xes0,xTsfc,Tf)
         CALL LATENT(xQe,De_h,xstability,ea,xes0,ro_air,xLs,
-     &    sfc_pressure,undef,snow_d,vegtype,xTsfc,Tf)
+     &    sfc_pressure,undef,snow_d,vegtype)
         CALL SENSIBLE(xQh,De_h,xstability,Tair,xTsfc,ro_air,Cp,
-     &    undef,snow_d,vegtype,Tf)
+     &    undef,snow_d,vegtype)
         CALL LONGOUT(xQle,xTsfc,emiss_sfc,Stef_Boltz)
         CALL CONDUCT(icond_flag,xQc,dy_snow_z,T_old_z,gamma_z,JJ)
         Qf = (1.0-albedo) * Qsi + Qli + xQle + xQh + xQe + xQc
@@ -278,7 +298,7 @@ cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
       real Tsfc,snow_d,vegtype,Tf
 
       if (snow_d.gt.0.0 .or. vegtype.eq.20.0) then
-        if(Tsfc.gt.Tf) Tsfc = Tf
+        if (Tsfc.gt.Tf) Tsfc = Tf
       endif
 
       return
@@ -348,15 +368,11 @@ cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
       implicit none
 
-      real e_balance,albedo,Qsi,Qli,Qle,Qh,Qe,Qc,Qm,undef,snow_d,vegtype
+      real e_balance,albedo,Qsi,Qli,Qle,Qh,Qe,Qc,Qm,undef,snow_d,
+     & vegtype
 
-      if (snow_d.gt.0.0) then
-        e_balance = (1.0-albedo)*Qsi + Qli + Qle + Qh + Qe + Qc - Qm 	
-		
-c JPB ADD - compute for PSI cells
-      elseif (vegtype.eq.20.0) then
+      if (snow_d.gt.0.0 .or. vegtype.eq.20.0) then
         e_balance = (1.0-albedo)*Qsi + Qli + Qle + Qh + Qe + Qc - Qm 
-		
       else
         e_balance = undef
       endif
@@ -421,14 +437,9 @@ cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
       implicit none
 
       real Qh,De_h,stability,Tair,Tsfc,ro_air,Cp,undef,snow_d,vegtype
-	  
-      if (snow_d.gt.0.0) then	  
-        Qh = ro_air * Cp * De_h * stability * (Tair - Tsfc) 
-		
-c JPB ADD - compute for PSI cells		
-      elseif (vegtype.eq.20.0) then
-        Qh = ro_air * Cp * De_h * stability * (Tair - Tsfc) 
-		
+
+      if (snow_d.gt.0.0 .or. vegtype.eq.20.0) then
+        Qh = ro_air * Cp * De_h * stability * (Tair - Tsfc)
       else
         Qh = undef
 c To do this, see the laps snow-shrub parameterization runs.
@@ -443,13 +454,15 @@ cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
       SUBROUTINE SFCTEMP(Tsfc,Tair,Qsi,Qli,ea,albedo,De_h,
      &  sfc_pressure,ht_windobs,windspd,ro_air,Cp,emiss_sfc,
-     &  Stef_Boltz,gravity,xLs,xkappa,z_0,Tf,Qc)
+     &  Stef_Boltz,gravity,xLs,xkappa,z_0,Tf,Qc,
+     &  count_Tsfc_not_converged)
 
       implicit none
 
       real Tsfc,Tair,Qsi,Qli,ea,albedo,De_h,sfc_pressure,ht_windobs,
      &  windspd,ro_air,Cp,emiss_sfc,Stef_Boltz,gravity,xLs,xkappa,
-     &  z_0,Tf,Qc,AAA,CCC,DDD,EEE,FFF,C1,C2,B1,B2,z_0_tmp
+     &  z_0,Tf,Qc,AAA,CCC,DDD,EEE,FFF,C1,C2,B1,B2,z_0_tmp,
+     &  count_Tsfc_not_converged
 
       AAA = ro_air * Cp * De_h
       CCC = 0.622 / sfc_pressure
@@ -466,7 +479,8 @@ c   computations.
       B1 = 9.4 * C2
       B2 = C1 * sqrt(C2)
 
-      CALL SOLVE(Tsfc,Tair,ea,AAA,CCC,DDD,EEE,FFF,B1,B2,Tf)
+      CALL SOLVE(Tsfc,Tair,ea,AAA,CCC,DDD,EEE,FFF,B1,B2,Tf,
+     &  count_Tsfc_not_converged)
 
       return
       end
@@ -474,7 +488,8 @@ c   computations.
 cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
-      SUBROUTINE SOLVE(xnew,Tair,ea,AAA,CCC,DDD,EEE,FFF,B1,B2,Tf)
+      SUBROUTINE SOLVE(xnew,Tair,ea,AAA,CCC,DDD,EEE,FFF,B1,B2,Tf,
+     &  count_Tsfc_not_converged)
 
       implicit none
 
@@ -483,7 +498,7 @@ cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
       real tol,old,A,B,C,other1,other2,es0,dother1,dother2,xnew,
      &  Tair,ea,AAA,CCC,DDD,EEE,FFF,B1,B2,Tf,B3,stability,
      &  dstability,fprime1,fprime2,fprime3,fprime4,B8,funct,
-     &  fprime
+     &  fprime,count_Tsfc_not_converged
 
       tol = 1.0e-2
       maxiter = 20
@@ -552,12 +567,17 @@ c Neutrally stable case.
         if (abs(xnew - old).lt.tol) return
         old = xnew
 
-      end do
+      enddo
 
 c If the maximum iterations are exceeded, send a message and set
 c   the surface temperature to the air temperature.
-      write (*,102)
-  102 format('max iteration exceeded when solving for Tsfc')
+c     write (*,102)
+c 102 format('max iteration exceeded when solving for Tsfc')
+
+c Count the number of times the model did not converge for this
+c   time step.
+      count_Tsfc_not_converged = count_Tsfc_not_converged + 1.0
+
       xnew = Tair
 
       return
@@ -573,16 +593,10 @@ cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
       real Qe,De_h,stability,ea,es0,ro_air,xLs,sfc_pressure,undef,
      &  snow_d,vegtype
-	 
-      if (snow_d.gt.0.0) then	
+  
+      if (snow_d.gt.0.0 .or. vegtype.eq.20.0) then
         Qe = ro_air * xLs * De_h * stability *
-     &    (0.622/sfc_pressure * (ea - es0))  
-	 
-c JPB ADD - compute for PSI cells	 
-      elseif (vegtype.eq.20.0) then	 
-        Qe = ro_air * xLs * De_h * stability *
-     &    (0.622/sfc_pressure * (ea - es0)) 
-	 
+     &    (0.622/sfc_pressure * (ea - es0))
       else
         Qe = undef
 c To do this, see the laps snow-shrub parameterization runs.
@@ -655,7 +669,7 @@ cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
      &  albedo_glacier
 
 c Note that this is very crude for many reasons, and should be
-c   improved.
+c   improved.  See below for an alternative solution.
 
       albedo_veg = 0.15
 
@@ -699,6 +713,79 @@ c Land.
           albedo = albedo_veg
         endif
       endif
+
+cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c The code below simulates the TIME-EVOLUTION OF SNOW ALBEDO in
+c   response to precipitation and melt. 
+
+c The general model equations are described in the paper:
+c   Modeling Snow Depth for Improved Simulation of
+c   Snow-Vegetion-Atmosphere Interactions.
+c   Strack, J. E., G. E. Liston, and R. A. Pielke, Sr., 2004,
+c   Journal of Hydrometeorology, 5, 723-734.
+
+c     implicit none
+c     real albedo
+c     real Tair
+c     real prec
+c     real al_gr_cold
+c     real al_gr_melt
+c     real al_min
+c     real al_max
+c     real dt,tau_1
+
+c Model time step.
+c     dt = 3600.
+c     dt = 86400.
+
+c Maximum albedo, minimum albedo, gradient cold snow albedo	  
+c   gradient melting snow albedo
+c     al_max = 0.8
+c     al_min = 0.5
+c     al_gr_cold = 0.008
+c     al_gr_melt = 0.24
+c     tau_1 = 86400.
+
+c Define the initial condition.
+c     albedo = al_max
+
+c     do iter=1,maxiter
+
+c In the presence of precipitation, re-initialize the albedo.
+c       if (prec.gt.0.003) albedo = al_max
+
+c Evolve the snow albedo.
+c       CALL SNOW_ALBEDO(Tair,albedo,al_gr_cold,al_min,
+c    &    al_gr_melt,dt,tau_1)
+
+c     enddo
+
+cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c     SUBROUTINE SNOW_ALBEDO(Tair,albedo,al_gr_cold,al_min,
+c    &  al_gr_melt,dt,tau_1)
+     
+c     implicit none
+c     real Tair
+c     real albedo
+c     real al_gr_cold
+c     real al_min
+c     real al_gr_melt
+c     real dt,tau_1
+      
+c     if (Tair.le.0.0) then
+c       albedo = albedo - (al_gr_cold * dt / tau_1)
+c       albedo = max(albedo,al_min)
+c     else 
+c       albedo = (albedo - al_min) * exp(-al_gr_melt * dt / tau_1) +
+c    &    al_min
+c     endif
+
+c     return
+c     end
+
+cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
       return
       end

@@ -351,7 +351,12 @@ c Don't let the elevation difference be greater than some number
 c  (like 1800 meters gives a factor of 4.4).  If it is too large
 c   you get huge precipitation adjustment, a divide by zero, or
 c   even negative adjustments for high elevations).
-          delta_topo = min(delta_topo,1800.0)
+c          delta_topo = min(delta_topo,1800.0)
+	
+c JPB add - reduce max value to 1200 m to avoid really large correction factors
+          delta_topo = min(delta_topo,1200.0)		  
+c JPB add - reduce max value to 1200 m to avoid really large correction factors
+
           alfa = precip_lapse_rate_m * delta_topo
           prec_grid(i,j) = prec_grid(i,j) * (1.0 + alfa)/(1.0 - alfa)
         enddo
@@ -367,8 +372,7 @@ c   precipitation values.
         enddo
       enddo
 
-c JPB ADD - rain/snow partition from ASCE 1956
-c   Use the temperature distribution to define whether this
+c Use the temperature distribution to define whether this
 c   precipitation is falling as rain or snow (generate a
 c   snow-precipitation array following the air temperature
 c   threshold defined by Auer (1974) = 2.0 C).  Note here that,
@@ -378,28 +382,18 @@ c   snow-water-equivalent per time step.
       Tf = 273.16
       do j=1,ny
         do i=1,nx
-		
-c JPB ADD - ASCE Rain/Snow Partitioning - too muc rain at low elevations		
-c          if (Tair_grid(i,j).le.(-2.0+Tf)) then
-c              sprec(i,j) = prec_grid(i,j)
-c          elseif (Tair_grid(i,j).gt.(-2.0+Tf).and.
-c     &        Tair_grid(i,j).le.(2.0+Tf)) then
-c              sprec(i,j) = (0.25*(275.16-Tair_grid(i,j)))*prec_grid(i,j)
-c          else 
 
-c JPB ADD - Auer (1974) Partitioning - Should accumulate more coastal snow
-          if (Tair_grid(i,j).lt.2.0+Tf) then
-            if (icorr_factor_index(iter).gt.0.0) then
-              prec_grid(i,j) =
-     &          corr_factor(i,j,icorr_factor_index(iter)) *
-     &          prec_grid(i,j)
-            else
-              prec_grid(i,j) = prec_grid(i,j)
-            endif
+c JPB add (6/29/2015) - add linear ramp function for rain/snow
+c uses scheme F from Feiccabrini and Lundberg (2009)
+          if (Tair_grid(i,j).le.(-2.0+Tf)) then
             sprec(i,j) = prec_grid(i,j)
-          else
-		  		  
-            sprec(i,j) = 0.0
+          elseif (Tair_grid(i,j).gt.(-2.0+Tf).and.
+     &      Tair_grid(i,j).le.(4.0+Tf)) then     
+            sprec(i,j) = (0.167*(277.16-Tair_grid(i,j)))*prec_grid(i,j)       
+          else      
+            sprec(i,j) = 0.0		
+c JPB add (6/29/2015) - add linear ramp function for rain/snow
+
           endif
         enddo
       enddo
@@ -690,7 +684,8 @@ c Convert the gridded topo-surface RH to Td.
       Td_grid = C * log(e/A) / (B - log(e/A)) + Tf
 
 c Convert the topo-surface temperature values to 700 mb values.
-      delta_topo = topo - topo_ref
+c     delta_topo = topo - topo_ref
+      delta_topo = topo_ref - topo
       Td_700 = Td_grid + Td_lapse_rate * delta_topo
       Tair_700 = Tair_grid + T_lapse_rate * delta_topo
 
@@ -707,7 +702,7 @@ c Use this RH at 700 mb to define the cloud fraction (0-1).
 c If the user wants to, reduce the calculate cloud fraction by the
 c   cloud_frac_factor.
       cloud_frac = cloud_frac_factor * cloud_frac
-c      print *,'   cloud fraction', cloud_frac
+
       return
       end
 
@@ -786,10 +781,18 @@ c   northern hemisphere.
 
 c Make the corrections so that the angles below the local horizon
 c   are still measured from the normal to the slope.
-      if (hr_angl.lt.0.0) then
-        if (hr_angl.lt.sun_azimuth) sun_azimuth = - pi - sun_azimuth
-      elseif (hr_angl.gt.0.0) then
-        if (hr_angl.gt.sun_azimuth) sun_azimuth = pi - sun_azimuth
+      if (xlat.ge.0.0) then
+        if (hr_angl.lt.0.0) then
+          if (hr_angl.lt.sun_azimuth) sun_azimuth = - pi - sun_azimuth
+        elseif (hr_angl.gt.0.0) then
+          if (hr_angl.gt.sun_azimuth) sun_azimuth = pi - sun_azimuth
+        endif
+      else
+c       if (hr_angl.lt.0.0) then
+c         if (hr_angl.lt.sun_azimuth) sun_azimuth = - pi - sun_azimuth
+c       elseif (hr_angl.gt.0.0) then
+c         if (hr_angl.gt.sun_azimuth) sun_azimuth = pi - sun_azimuth
+c       endif
       endif
 
 c Build, from the variable with north having zero azimuth, a 
@@ -822,12 +825,10 @@ c   global horizon.
 c Adjust the solar radiation for slope, etc.
       Qsi_direct = cos_i * Qsi_trans_dir
       Qsi_diffuse = cos_Z * Qsi_trans_dif
-	  
-c      print *,'   Qsi_direct', Qsi_direct
-c      print *,'   Qsi_diffuse', Qsi_diffuse
+
 c Combine the direct and diffuse solar components.
       Qsi = Qsi_direct + Qsi_diffuse
-c      print *,'   Qsi', Qsi
+
       return
       end
 
@@ -1184,6 +1185,12 @@ c   assuming this lapse rate.  Then interpolate the temperatures
 c   to the model grid.  Then use the topography data and lapse
 c   rate to adjust the gridded temperatures values back to the
 c   actual elevation.
+
+c Contact Glen if you are interested in the temperature inversion
+c   code presented in: Mernild, S. H., and G. E. Liston, 2010:
+c   The influence of air temperature inversions on snowmelt and
+c   glacier mass-balance simulations, Ammassalik Island, SE
+c   Greenland. J. Applied Meteorology and Climatology, 49, 47-67.
 
       implicit none
 
@@ -1817,8 +1824,8 @@ c   decimal hour.
 
 c Number of minutes into the simulation.  Here I have assumed that
 c   dt will never be in fractions of minutes.
-c      xmin = ((real(iter) - 1.0) * dt) / 60.0
-      xmin = (real(iter) - 1.0) * (dt / 60.0)   
+c     xmin = ((real(iter) - 1.0) * dt) / 60.0
+      xmin = (real(iter) - 1.0) * (dt / 60.0)
 
 c Model integration time in decimal hours.  The xhour_frac variable
 c   needs to be fixed for dt < 3600 sec.
@@ -1901,8 +1908,13 @@ c   negative_deg_C m-1 below.
 
 c If you want to use the 'user' array, put your monthly values in
 c   here and set lapse_rate_user_flag = 1 in the .par file.
-      data lapse_rate_user /7.6,7.0,7.4,6.5,5.5,4.9,
-     &                      4.1,4.6,6.0,7.7,8.4,7.6/
+c      data lapse_rate_user /7.8,7.0,7.1,4.7,3.3,3.3,
+c     &                      3.6,3.7,4.7,5.5,7.2,6.5/
+
+c JPB add - values from local domain PRISM data used in model calibration
+      data lapse_rate_user /2.4,2.8,3.7,5.3,5.6,5.6,
+     &                      5.6,5.0,5.0,4.3,2.8,2.5/
+c JPB add - values from local domain PRISM data used in model calibration
 
 c The initial vapor pressure coeffs are in units of km-1.
       real am(months)
@@ -1931,8 +1943,11 @@ c The precipitation lapse rate units are in km-1.
 
 c If you want to use the 'user' array, put your monthly values in
 c   here and set iprecip_lapse_rate_user_flag = 1 in the .par file.
-      data precip_lapse_rate_user /0.20,0.10,0.10,0.10,0.10,0.08,
-     &                             0.10,0.20,0.30,0.30,0.20,0.20/
+
+c JPB add - values from local domain PRISM data used in model calibration
+      data precip_lapse_rate_user /0.15,0.15,0.13,0.10,0.10,0.10,
+     &                             0.13,0.15,0.18,0.18,0.15,0.15/
+c JPB add - values from local domain PRISM data used in model calibration
 
 c Air and dewpoint temperature.
       do k=1,months

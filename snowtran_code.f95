@@ -84,6 +84,17 @@ ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
       real topo(nx_max,ny_max)
       real vegtype(nx_max,ny_max)
 
+      real tabler_nn_orig(nx_max,ny_max)
+      real tabler_ss_orig(nx_max,ny_max)
+      real tabler_ee_orig(nx_max,ny_max)
+      real tabler_ww_orig(nx_max,ny_max)
+      real tabler_ne_orig(nx_max,ny_max)
+      real tabler_se_orig(nx_max,ny_max)
+      real tabler_sw_orig(nx_max,ny_max)
+      real tabler_nw_orig(nx_max,ny_max)
+      real snow_d_tabler(nx_max,ny_max)
+      real topo_tmp(nx_max,ny_max)
+
       real uwind_grid(nx_max,ny_max),vwind_grid(nx_max,ny_max)
       real windspd_grid(nx_max,ny_max),winddir_grid(nx_max,ny_max)
       real tair_grid(nx_max,ny_max),sprec(nx_max,ny_max)
@@ -160,7 +171,7 @@ ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
 c Perform some intialization steps that are unique to SnowTran-3D.
-        if (iter.eq.iter_start) then
+      if (iter.eq.iter_start) then
 
         print *,
      & 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
@@ -170,31 +181,187 @@ c Perform some intialization steps that are unique to SnowTran-3D.
      & 'c                    All Rights Reserved                   c',
      & 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'
 
-c If this is the first time through, generate the Tabler snow
-c   accumulation surfaces.
-          call tabler_3d(nx,ny,topo_land,deltax,deltay,
-     &      tabler_ww,tabler_ee,tabler_ss,tabler_nn,erosion_dist,
-     &      tabler_ne,tabler_se,tabler_sw,tabler_nw,slope_adjust)
+        if (subgrid_flag.eq.1.0) then
 
-c If you want to write out these distributions, uncomment the
-c   following lines.
-c         open(51,file='outputs/tabler_sfcs.gdat',
-c    &      form='unformatted',access='direct',recl=4*nx*ny)
-c         write(51,rec=1) ((tabler_ww(i,j),i=1,nx),j=1,ny)
-c         write(51,rec=2) ((tabler_ee(i,j),i=1,nx),j=1,ny)
-c         write(51,rec=3) ((tabler_ss(i,j),i=1,nx),j=1,ny)
-c         write(51,rec=4) ((tabler_nn(i,j),i=1,nx),j=1,ny)
-c         write(51,rec=5) ((tabler_ne(i,j),i=1,nx),j=1,ny)
-c         write(51,rec=6) ((tabler_se(i,j),i=1,nx),j=1,ny)
-c         write(51,rec=7) ((tabler_sw(i,j),i=1,nx),j=1,ny)
-c         write(51,rec=8) ((tabler_nw(i,j),i=1,nx),j=1,ny)
-c         write(51,rec=9) ((topo_land(i,j),i=1,nx),j=1,ny)
-c         close (51)
+c Check to make sure topoflag = 0.0.
+          if (topoflag.eq.1.0) then
+            print *,'If subgrid_flag=1.0, then topoflag must = 0.0'
+            print *,'  Correct this in snowmodel.par to continue.'
+            stop
+          endif
+
+c The Tabler surfaces were originally developed assuming the grid
+c   increment would never be less than 1.0 m.  You probably should
+c   not run it with deltax and deltay less than 1.0 without some
+c   further testing.
+          if (deltax.lt.1.0 .or. deltay.lt.1.0) then
+            print *,'The Tabler subgrid algorithm has not been'
+            print *,'tested for deltax and/or deltay less than'
+            print *,'1.0 m.  You should probably do some testing'
+            print *,'before running the model at less than 1.0-m'
+            print *,'resolution.  Acually I am pretty sure it will'
+            print *,'run, but it will not generate the correct'
+            print *,'snow-depth profiles.'
+            stop
+          endif
+
+c If this is the first time through, generate the Tabler snow
+c   accumulation surfaces for the land topography.
+          call tabler_3d(nx,ny,topo_land,deltax,deltay,
+     &      tabler_ww_orig,tabler_ee_orig,tabler_ss_orig,
+     &      tabler_nn_orig,erosion_dist,tabler_ne_orig,
+     &      tabler_se_orig,tabler_sw_orig,tabler_nw_orig,
+     &      slope_adjust)
+
+c As part of generating the Tabler surfaces, a -8888.0 has been
+c   used to identify the areas immediately upwind of any Tabler
+c   drift trap that is an erosion area where no snow is allowed
+c   to accumulate (see 'erosion_dist' in snowmodel.par).  Now
+c   take those areas and set them equal to the snow-holding depth
+c   to keep the snow relatively thin in those areas.
+          do i=1,nx
+            do j=1,ny
+              tabler_nn_orig(i,j) =
+     &          max(tabler_nn_orig(i,j),vegsnowd_xy(i,j))
+              tabler_ne_orig(i,j) =
+     &          max(tabler_ne_orig(i,j),vegsnowd_xy(i,j))
+              tabler_ee_orig(i,j) =
+     &          max(tabler_ee_orig(i,j),vegsnowd_xy(i,j))
+              tabler_se_orig(i,j) =
+     &          max(tabler_se_orig(i,j),vegsnowd_xy(i,j))
+              tabler_ss_orig(i,j) =
+     &          max(tabler_ss_orig(i,j),vegsnowd_xy(i,j))
+              tabler_sw_orig(i,j) =
+     &          max(tabler_sw_orig(i,j),vegsnowd_xy(i,j))
+              tabler_ww_orig(i,j) =
+     &          max(tabler_ww_orig(i,j),vegsnowd_xy(i,j))
+              tabler_nw_orig(i,j) =
+     &          max(tabler_nw_orig(i,j),vegsnowd_xy(i,j))
+            enddo
+          enddo
+
+c If you don't want to write out these distributions, comment out
+c   the following lines.
+          open(51,file='outputs/tabler_sfcs.gdat',
+     &      form='unformatted',access='direct',recl=4*nx*ny)
+          write(51,rec=1) ((tabler_ww_orig(i,j),i=1,nx),j=1,ny)
+          write(51,rec=2) ((tabler_ee_orig(i,j),i=1,nx),j=1,ny)
+          write(51,rec=3) ((tabler_ss_orig(i,j),i=1,nx),j=1,ny)
+          write(51,rec=4) ((tabler_nn_orig(i,j),i=1,nx),j=1,ny)
+          write(51,rec=5) ((tabler_ne_orig(i,j),i=1,nx),j=1,ny)
+          write(51,rec=6) ((tabler_se_orig(i,j),i=1,nx),j=1,ny)
+          write(51,rec=7) ((tabler_sw_orig(i,j),i=1,nx),j=1,ny)
+          write(51,rec=8) ((tabler_nw_orig(i,j),i=1,nx),j=1,ny)
+          write(51,rec=9) ((topo_land(i,j),i=1,nx),j=1,ny)
+          close (51)
+
+c This available if you want to save a specific Tabler surface at
+c   each time step.
+          open(52,file='outputs/tabler_sfcs_iter.gdat',
+     &      form='unformatted',access='direct',recl=4*nx*ny)
+
         endif
+
+      endif
 
 c Print out some basic run information to the screen.
         print 102, windspd_flag,winddir_flag
   102   format(25x,'    wind spd = ',f5.2,'   wind dir = ',f4.0)
+
+        if (subgrid_flag.eq.1.0) then
+
+c Generate the tabler surfaces at this time step, assuming the
+c   snow surface is the topographic surface.
+
+c Take the snow depth coming out of SnowPack, and before any wind
+c   redistribution has been applied at this time step, and add it
+c   to topo_land.  Then use this to create the Tabler surface that
+c   will be used for this time step.  Also define this depth to be
+c   dependent on the SnowPack spatially distributed snow density,
+c   not the constant density used in SnowTran.
+          do i=1,nx
+            do j=1,ny
+              snow_d_tabler(i,j) = swe_depth(i,j) *
+     &          ro_water / ro_snow_grid(i,j)
+              topo_tmp(i,j) = tp_scale * snow_d_tabler(i,j) +
+     &          topo_land(i,j)
+            enddo
+          enddo
+
+          call tabler_3d(nx,ny,topo_tmp,deltax,deltay,
+     &      tabler_ww_orig,tabler_ee_orig,tabler_ss_orig,
+     &      tabler_nn_orig,erosion_dist,tabler_ne_orig,
+     &      tabler_se_orig,tabler_sw_orig,tabler_nw_orig,
+     &      slope_adjust)
+
+c The Tabler surfaces that were just generated have had topo_tmp
+c   subtracted off of them, giving just the drift profiles with
+c   things like zero drift depth on ridges and windwards slopes.
+c   So, add the snow depth, prior to any wind redistribution, to
+c   these Tabler surfaces.  This will be the maximum snow depth
+c   allowed as part of the wind redistribution.
+          do i=1,nx
+            do j=1,ny
+              tabler_ww(i,j) = tp_scale * snow_d_tabler(i,j) +
+     &          tabler_ww_orig(i,j)
+              tabler_ee(i,j) = tp_scale * snow_d_tabler(i,j) +
+     &          tabler_ee_orig(i,j)
+              tabler_ss(i,j) = tp_scale * snow_d_tabler(i,j) +
+     &          tabler_ss_orig(i,j)
+              tabler_nn(i,j) = tp_scale * snow_d_tabler(i,j) +
+     &          tabler_nn_orig(i,j)
+              tabler_ne(i,j) = tp_scale * snow_d_tabler(i,j) +
+     &          tabler_ne_orig(i,j)
+              tabler_se(i,j) = tp_scale * snow_d_tabler(i,j) +
+     &          tabler_se_orig(i,j)
+              tabler_sw(i,j) = tp_scale * snow_d_tabler(i,j) +
+     &          tabler_sw_orig(i,j)
+              tabler_nw(i,j) = tp_scale * snow_d_tabler(i,j) +
+     &          tabler_nw_orig(i,j)
+            enddo
+          enddo
+
+c As part of generating the Tabler surfaces, a -8888.0 has been
+c   used to identify the areas immediately upwind of any Tabler
+c   drift trap that is an erosion area where no snow is allowed
+c   to accumulate (see 'erosion_dist' in snowmodel.par).  Now
+c   take those areas and set them equal to the snow-holding depth
+c   to keep the snow relatively thin in those areas.
+          do i=1,nx
+            do j=1,ny
+              tabler_nn(i,j) = max(tabler_nn(i,j),vegsnowd_xy(i,j))
+              tabler_ne(i,j) = max(tabler_ne(i,j),vegsnowd_xy(i,j))
+              tabler_ee(i,j) = max(tabler_ee(i,j),vegsnowd_xy(i,j))
+              tabler_se(i,j) = max(tabler_se(i,j),vegsnowd_xy(i,j))
+              tabler_ss(i,j) = max(tabler_ss(i,j),vegsnowd_xy(i,j))
+              tabler_sw(i,j) = max(tabler_sw(i,j),vegsnowd_xy(i,j))
+              tabler_ww(i,j) = max(tabler_ww(i,j),vegsnowd_xy(i,j))
+              tabler_nw(i,j) = max(tabler_nw(i,j),vegsnowd_xy(i,j))
+            enddo
+          enddo
+
+c The following saves the calculated Tabler surface at each time
+c   step.  You can comment this out if you don't want to write
+c   them out.
+          if (tabler_dir.eq.0.0) then
+            write(52,rec=iter) ((tabler_nn(i,j),i=1,nx),j=1,ny)
+          elseif (tabler_dir.eq.45.0) then
+            write(52,rec=iter) ((tabler_ne(i,j),i=1,nx),j=1,ny)
+          elseif (tabler_dir.eq.90.0) then
+            write(52,rec=iter) ((tabler_ee(i,j),i=1,nx),j=1,ny)
+          elseif (tabler_dir.eq.135.0) then
+            write(52,rec=iter) ((tabler_se(i,j),i=1,nx),j=1,ny)
+          elseif (tabler_dir.eq.180.0) then
+            write(52,rec=iter) ((tabler_ss(i,j),i=1,nx),j=1,ny)
+          elseif (tabler_dir.eq.225.0) then
+            write(52,rec=iter) ((tabler_sw(i,j),i=1,nx),j=1,ny)
+          elseif (tabler_dir.eq.270.0) then
+            write(52,rec=iter) ((tabler_ww(i,j),i=1,nx),j=1,ny)
+          elseif (tabler_dir.eq.315.0) then
+            write(52,rec=iter) ((tabler_nw(i,j),i=1,nx),j=1,ny)
+          endif
+
+        endif
 
 c In SnowTran-3D, the summed snow precipitation must be in units
 c   of snow-depth.  The rest of the routines assume that it is in
@@ -208,6 +375,10 @@ c   swe units.
 c If running EnBal and SnowPack, then don't need to run these
 c   two routines. 
         if (run_enbal.ne.1.0 .and. run_snowpack.ne.1.0) then
+          print *,'I am not sure you can configure the model like'
+          print *,'this anymore.  You may need to always run'
+          print *,'SnowTran-3D with SnowPack now.'
+          stop
 c Add the new precipitation to the snowpack.
           call precip(snow_d,sprec,nx,ny,ro_snow,
      &      ro_water,sum_sprec,soft_snow_d,sum_prec)
@@ -302,17 +473,17 @@ c Compute the new snow depth due to accumulation from precipitation,
 c   saltation, and suspension, and the mass loss due to
 c   sublimation.
         call accum(snow_d,nx,ny,ro_snow,dt,ro_water,
-     &    deltax,deltay,vegtype,vegsnowd_xy,snow_d_init,
+     &    deltax,deltay,vegtype,vegsnowd_xy,
      &    index_ue,index_uw,index_vn,index_vs,
      &    Qsalt_u,Qsalt_v,Qsusp_u,Qsusp_v,Qsubl,dh_salt,
      &    dh_salt_u,dh_salt_v,dh_susp,dh_susp_u,dh_susp_v,
-     &    sum_sprec,wbal_qsubl,wbal_salt,wbal_susp,bs_flag,
+     &    wbal_qsubl,wbal_salt,wbal_susp,bs_flag,
      &    soft_snow_d,topo,topo_land,topoflag,subgrid_flag,
      &    winddir_grid,tabler_nn,tabler_ss,tabler_ee,tabler_ww,
-     &    tabler_ne,tabler_se,tabler_sw,tabler_nw,tp_scale,
+     &    tabler_ne,tabler_se,tabler_sw,tabler_nw,
      &    uwind_grid,vwind_grid,wbal_subgrid,sum_qsubl,
      &    sum_trans,swe_depth,snow_depth,ro_snow_grid,
-     &    dh_subgrid,tabler_dir)
+     &    dh_subgrid,tabler_dir,erosion_dist,slope_adjust)
 
 c Use the changes in swe due to saltation, suspension, and
 c   blowing snow sublimation to adjust the multilayer snowpack
@@ -329,6 +500,7 @@ c Net mass loss for this grid cell at this time step.
 
 c Extract the vertical column for this i,j point, and send it
 c   to the subroutine. *** Note that I should use f95, then I would
+
 c   not have to do this (I could pass in subsections of the arrays).
                 do k=1,nz_max
                   swe_lyr_z(k) = swe_lyr(i,j,k)
@@ -480,8 +652,8 @@ c   includes SnowTran-3D.
      &      wbal_subgrid(i,j) - swesublim(i,j) + canopy_int_old(i,j) -
      &      canopy_int(i,j) + Qcs(i,j)
 
-c          if (abs(w_balance(i,j)).gt.1.0e-6)
-c     &      print*,'water imbalance at iter =',iter,' ',w_balance(i,j)
+          if (abs(w_balance(i,j)).gt.1.0e-5)
+     &      print*,'water imbalance at iter =',iter,' ',w_balance(i,j)
 
         enddo
       enddo
@@ -685,17 +857,17 @@ ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
       subroutine accum(snow_d,nx,ny,ro_snow,dt,ro_water,
-     &  deltax,deltay,vegtype,vegsnowd_xy,snow_d_init,
+     &  deltax,deltay,vegtype,vegsnowd_xy,
      &  index_ue,index_uw,index_vn,index_vs,
      &  Qsalt_u,Qsalt_v,Qsusp_u,Qsusp_v,Qsubl,dh_salt,
      &  dh_salt_u,dh_salt_v,dh_susp,dh_susp_u,dh_susp_v,
-     &  sum_sprec,wbal_qsubl,wbal_salt,wbal_susp,bs_flag,
+     &  wbal_qsubl,wbal_salt,wbal_susp,bs_flag,
      &  soft_snow_d,topo,topo_land,topoflag,subgrid_flag,
      &  winddir_grid,tabler_nn,tabler_ss,tabler_ee,tabler_ww,
-     &  tabler_ne,tabler_se,tabler_sw,tabler_nw,tp_scale,
+     &  tabler_ne,tabler_se,tabler_sw,tabler_nw,
      &  uwind_grid,vwind_grid,wbal_subgrid,sum_qsubl,
      &  sum_trans,swe_depth,snow_depth,ro_snow_grid,
-     &  dh_subgrid,tabler_dir)
+     &  dh_subgrid,tabler_dir,erosion_dist,slope_adjust)
 
       implicit none
 
@@ -704,14 +876,15 @@ ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
       integer i,j,nx,ny
 
       real ro_snow,dt,deltax,deltay,bs_flag,topoflag,ro_water
-      real snowdmin,hard_snow_d,subgrid_flag,tp_scale,tabler_dir
+      real snowdmin,hard_snow_d,subgrid_flag,tabler_dir
+      real erosion_dist,slope_adjust
 
       real snow_d(nx_max,ny_max)
-      real snow_d_init(nx_max,ny_max)
       real snow_d_tmp(nx_max,ny_max)
       real snow_depth(nx_max,ny_max)
       real swe_depth(nx_max,ny_max)
       real ro_snow_grid(nx_max,ny_max)
+      real snow_d_tabler(nx_max,ny_max)
 
       real tabler_nn(nx_max,ny_max)
       real tabler_ss(nx_max,ny_max)
@@ -745,8 +918,6 @@ ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
       real Qsusp_u(nx_max,ny_max)
       real Qsusp_v(nx_max,ny_max)
-
-      real sum_sprec(nx_max,ny_max)
 
       real wbal_qsubl(nx_max,ny_max)
       real wbal_salt(nx_max,ny_max)
@@ -832,11 +1003,30 @@ c   redistribution.
 c Run the subgrid parameterization to account for unrealistic
 c   snow accumulation spikes.
       if (subgrid_flag.eq.1.0) then
-        call subgrid_1(nx,ny,snow_d_init,sum_sprec,
-     &    index_ue,index_uw,index_vn,index_vs,snow_d,winddir_grid,
-     &    tabler_nn,tabler_ss,tabler_ee,tabler_ww,tp_scale,
+
+c Do the Tabler corrections while considering the SnowPack density
+c   contribution to snow depth.  When done, convert back to SnowTran
+c   constant density convention.
+        do i=1,nx
+          do j=1,ny
+            snow_d_tabler(i,j) = snow_d(i,j) * ro_snow /
+     &        ro_snow_grid(i,j)
+          enddo
+        enddo
+
+        call subgrid_1(nx,ny,snow_d_tabler,
+     &    index_ue,index_uw,index_vn,index_vs,winddir_grid,
+     &    tabler_nn,tabler_ss,tabler_ee,tabler_ww,
      &    tabler_ne,tabler_se,tabler_sw,tabler_nw,uwind_grid,
-     &    vwind_grid,tabler_dir,vegtype,vegsnowd_xy)
+     &    vwind_grid,tabler_dir)
+
+        do i=1,nx
+          do j=1,ny
+            snow_d(i,j) = snow_d_tabler(i,j) * ro_snow_grid(i,j) /
+     &        ro_snow
+          enddo
+        enddo
+
       endif
 
 c Calculate the snow depth resulting from the subgrid
@@ -929,6 +1119,7 @@ cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
       integer i,j,nx,ny
       real snow(nx_max,ny_max)
+      real snow_tmp(nx_max,ny_max)
 
 c Performs a 9-point smoothing operation.
 
@@ -942,57 +1133,65 @@ c   then divided by the total weight.
 c Do the interior.
       do i=2,nx-1
         do j=2,ny-1
-          snow(i,j) = (snow(i,j) + 0.5 * (snow(i,j-1) + snow(i,j+1) +
-     &      snow(i-1,j) + snow(i+1,j)) + 0.3 * (snow(i-1,j-1) +
-     &      snow(i+1,j+1) + snow(i-1,j+1) + snow(i+1,j-1))) / 4.2
+          snow_tmp(i,j) = (snow(i,j) + 0.5 * (snow(i,j-1) +
+     &      snow(i,j+1) + snow(i-1,j) + snow(i+1,j)) + 0.3 *
+     &      (snow(i-1,j-1) + snow(i+1,j+1) + snow(i-1,j+1) +
+     &      snow(i+1,j-1))) / 4.2
         enddo
       enddo
 
 c Do the sides.
       j = 1
       do i=2,nx-1
-        snow(i,j) = (snow(i,j) + 0.5 * (snow(i,j+1) + snow(i-1,j) +
+        snow_tmp(i,j) = (snow(i,j) + 0.5 * (snow(i,j+1) + snow(i-1,j) +
      &    snow(i+1,j)) + 0.3 * (snow(i+1,j+1) + snow(i-1,j+1))) / 3.1
       enddo
 
       j = ny
       do i=2,nx-1
-        snow(i,j) = (snow(i,j) + 0.5 * (snow(i,j-1) + snow(i-1,j) +
+        snow_tmp(i,j) = (snow(i,j) + 0.5 * (snow(i,j-1) + snow(i-1,j) +
      &    snow(i+1,j)) + 0.3 * (snow(i+1,j-1) + snow(i-1,j-1))) / 3.1
       enddo
 
       i = 1
       do j=2,ny-1
-        snow(i,j) = (snow(i,j) + 0.5 * (snow(i,j-1) + snow(i,j+1) +
+        snow_tmp(i,j) = (snow(i,j) + 0.5 * (snow(i,j-1) + snow(i,j+1) +
      &    snow(i+1,j)) + 0.3 * (snow(i+1,j-1) + snow(i+1,j+1))) / 3.1
       enddo
 
       i = nx
       do j=2,ny-1
-        snow(i,j) = (snow(i,j) + 0.5 * (snow(i,j-1) + snow(i,j+1) +
+        snow_tmp(i,j) = (snow(i,j) + 0.5 * (snow(i,j-1) + snow(i,j+1) +
      &    snow(i-1,j)) + 0.3 * (snow(i-1,j-1) + snow(i-1,j+1))) / 3.1
       enddo
 
 c Do the corners.
       i = 1
       j = 1
-      snow(i,j) = (snow(i,j) + 0.5 * (snow(i,j+1) + snow(i+1,j)) +
+      snow_tmp(i,j) = (snow(i,j) + 0.5 * (snow(i,j+1) + snow(i+1,j)) +
      &  0.3 * snow(i+1,j+1)) / 2.3
 
       i = nx
       j = 1
-      snow(i,j) = (snow(i,j) + 0.5 * (snow(i,j+1) + snow(i-1,j)) +
+      snow_tmp(i,j) = (snow(i,j) + 0.5 * (snow(i,j+1) + snow(i-1,j)) +
      &  0.3 * snow(i-1,j+1)) / 2.3
 
       i = 1
       j = ny
-      snow(i,j) = (snow(i,j) + 0.5 * (snow(i,j-1) + snow(i+1,j)) +
+      snow_tmp(i,j) = (snow(i,j) + 0.5 * (snow(i,j-1) + snow(i+1,j)) +
      &  0.3 * snow(i+1,j-1)) / 2.3
 
       i = nx
       j = ny
-      snow(i,j) = (snow(i,j) + 0.5 * (snow(i,j-1) + snow(i-1,j)) +
+      snow_tmp(i,j) = (snow(i,j) + 0.5 * (snow(i,j-1) + snow(i-1,j)) +
      &  0.3 * snow(i-1,j-1)) / 2.3
+
+c Return the smoothed array.
+      do i=1,nx
+        do j=1,ny
+          snow(i,j) = snow_tmp(i,j)
+        enddo
+      enddo
 
       return
       end
@@ -1870,7 +2069,7 @@ cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
       integer k,istart,iend,jstart,jend
 
       real deltax,deltay,ro_snow,dt,dQsalt,snowdmin
-      real hard_snow_d
+      real hard_snow_d,weight_u,weight_v,eps
 
       integer index_ue(ny_max,2*nx_max+1)
       integer index_uw(ny_max,2*nx_max+1)
@@ -1952,28 +2151,6 @@ c   eroded.
         enddo
       enddo
 
-c Update the snow depth changes due to saltation before considering
-c   the wind transport from the north and south (this will help
-c   with the erosion computation.
-      do i=1,nx
-        do j=1,ny
-          snow_d(i,j) = snow_d(i,j) + dh_salt_u(i,j)
-          soft_snow_d(i,j) = soft_snow_d(i,j) + dh_salt_u(i,j)
-
-c For the case of erosion, decrease the soft snow depth.  For the
-c   case of deposition, add to the hard snow depth and convert any
-c   soft snow under that deposition to hard snow.
-c         if (dh_salt_u(i,j).gt.0.0) then
-c           soft_snow_d(i,j) = 0.0
-c           soft_snow_d(i,j) = snow_d(i,j)
-c         else
-c           soft_snow_d(i,j) = soft_snow_d(i,j) + dh_salt_u(i,j)
-cc          soft_snow_d(i,j) =
-cc   &         max(0.0,soft_snow_d(i,j) + dh_salt_u(i,j))
-c        endif
-        enddo
-      enddo
-
 c Consider SOUTHERLY winds.
       do i=1,nx
         do k=1,index_vs(i,1)
@@ -2030,24 +2207,25 @@ c   eroded.
         enddo
       enddo
 
-c Update the snow depth changes due to saltation transport from
-c   the north and south.
+c Update the snow depth changes due to saltation transport from the
+c   the east and west, and north and south.  Also correct dh_salt_u
+c   and dh_salt_v to account for the minimum snow depth.
+      eps = 1e-6
       do i=1,nx
         do j=1,ny
-          snow_d(i,j) = snow_d(i,j) + dh_salt_v(i,j)
-          soft_snow_d(i,j) = soft_snow_d(i,j) + dh_salt_v(i,j)
+          weight_u = abs(dh_salt_u(i,j)) /
+     &      (abs(dh_salt_u(i,j)) + abs(dh_salt_v(i,j)) + eps)
 
-c For the case of erosion, decrease the soft snow depth.  For the
-c   case of deposition, add to the hard snow depth and convert any
-c   soft snow under that deposition to hard snow.
-c         if (dh_salt_v(i,j).gt.0.0) then
-c           soft_snow_d(i,j) = 0.0
-c           soft_snow_d(i,j) = snow_d(i,j)
-c         else
-c           soft_snow_d(i,j) = soft_snow_d(i,j) + dh_salt_v(i,j)
-cc          soft_snow_d(i,j) =
-cc   &         max(0.0,soft_snow_d(i,j) + dh_salt_v(i,j))
-c         endif
+          weight_v = abs(dh_salt_v(i,j)) /
+     &      (abs(dh_salt_u(i,j)) + abs(dh_salt_v(i,j)) + eps)
+
+          dh_salt_u(i,j) = weight_u * dh_salt_u(i,j)
+          dh_salt_v(i,j) = weight_v * dh_salt_v(i,j)
+
+          snow_d(i,j) = snow_d(i,j) + dh_salt_u(i,j) + dh_salt_v(i,j)
+
+          soft_snow_d(i,j) = soft_snow_d(i,j) + dh_salt_u(i,j) +
+     &      dh_salt_v(i,j)
         enddo
       enddo
 
@@ -2057,11 +2235,11 @@ c         endif
 cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
-      subroutine subgrid_1(nx,ny,snow_d_init,sum_sprec,
-     &  index_ue,index_uw,index_vn,index_vs,snow_d,winddir,
-     &  tabler_nn,tabler_ss,tabler_ee,tabler_ww,tp_scale,
+      subroutine subgrid_1(nx,ny,snow_d,
+     &  index_ue,index_uw,index_vn,index_vs,winddir,
+     &  tabler_nn,tabler_ss,tabler_ee,tabler_ww,
      &  tabler_ne,tabler_se,tabler_sw,tabler_nw,uwind_grid,
-     &  vwind_grid,tabler_dir,vegtype,vegsnowd_xy)
+     &  vwind_grid,tabler_dir)
 
 c This subroutine forces SnowTran-3D's snow accumluation profiles
 c   to be bounded by the equilibrium topographic drift catchment
@@ -2078,7 +2256,7 @@ c   Snow Conference, San Diego, California, 87-97.
       integer i,j,nx,ny
       integer k,istart,iend,jstart,jend
 
-      real snow_d_extra,tp_scale,snow_sfc,tabler,tabler_dir
+      real snow_d_extra,snow_sfc,tabler,tabler_dir
 
       integer index_ue(ny_max,2*nx_max+1)
       integer index_uw(ny_max,2*nx_max+1)
@@ -2086,8 +2264,8 @@ c   Snow Conference, San Diego, California, 87-97.
       integer index_vs(nx_max,2*ny_max+1)
 
       real snow_d(nx_max,ny_max)
-      real snow_d_init(nx_max,ny_max)
-      real sum_sprec(nx_max,ny_max)
+      real snow_d1(nx_max,ny_max)
+      real snow_d2(nx_max,ny_max)
       real tabler_nn(nx_max,ny_max)
       real tabler_ss(nx_max,ny_max)
       real tabler_ee(nx_max,ny_max)
@@ -2100,8 +2278,8 @@ c   Snow Conference, San Diego, California, 87-97.
       real uwind_grid(nx_max,ny_max)
       real vwind_grid(nx_max,ny_max)
 
-      real vegtype(nx_max,ny_max)
-      real vegsnowd_xy(nx_max,ny_max)
+      real weight_u(nx_max,ny_max)
+      real weight_v(nx_max,ny_max)
 
 c This is just a summary of all of the possibilities.
 c           if(winddir(i,j).gt.337.5.and.winddir(i,j).le.22.5)then
@@ -2122,25 +2300,26 @@ c           elseif(winddir(i,j).gt.292.5.and.winddir(i,j).le.337.5)then
 c             tabler = tabler_nw(i,j)
 c           endif
 
+c Create a copy of the incoming snow depth distribution.  Also define
+c   the u and v weighting functions.
+      do j=1,ny
+        do i=1,nx
+          snow_d1(i,j) = snow_d(i,j)
+          snow_d2(i,j) = snow_d(i,j)
+
+          weight_u(i,j) = abs(uwind_grid(i,j)) /
+     &          sqrt(uwind_grid(i,j)**2 + vwind_grid(i,j)**2)
+          weight_v(i,j) = abs(vwind_grid(i,j)) /
+     &          sqrt(uwind_grid(i,j)**2 + vwind_grid(i,j)**2)
+        enddo
+      enddo
+
 c Consider WESTERLY winds.
       do j=1,ny
         do k=1,index_uw(j,1)
           istart = index_uw(j,k*2)+1
           iend = index_uw(j,k*2+1)
           do i=istart,iend
-
-c           if(winddir(i,j).gt.337.5.and.winddir(i,j).le.360.0.or.
-c    &        winddir(i,j).ge.0.0.and.winddir(i,j).le.22.5)then
-c             tabler = tabler_nn(i,j)
-c           elseif(winddir(i,j).gt.157.5.and.winddir(i,j).le.202.5)then
-c             tabler = tabler_ss(i,j)
-c           elseif(winddir(i,j).gt.202.5.and.winddir(i,j).le.247.5)then
-c             tabler = tabler_sw(i,j)
-c           elseif(winddir(i,j).gt.247.5.and.winddir(i,j).le.292.5)then
-c             tabler = tabler_ww(i,j)
-c           elseif(winddir(i,j).gt.292.5.and.winddir(i,j).le.337.5)then
-c             tabler = tabler_nw(i,j)
-c           endif
 
             if(tabler_dir.gt.337.5.and.tabler_dir.le.360.0.or.
      &        tabler_dir.ge.0.0.and.tabler_dir.le.22.5)then
@@ -2155,26 +2334,18 @@ c           endif
               tabler = tabler_nw(i,j)
             endif
 
-            if (tabler.eq.-8888.0) then
-              snow_sfc = 0.01
-            elseif (tabler.le.0.0) then
-              snow_sfc = tp_scale * (snow_d_init(i,j) + sum_sprec(i,j))
-              snow_sfc = max(snow_sfc,vegsnowd_xy(i,j))
-            else
-              snow_sfc = max(tabler,vegsnowd_xy(i,j))
-            endif
+            snow_sfc = tabler
 
-            if (snow_d(i,j).gt.snow_sfc) then
-              snow_d_extra = (snow_d(i,j) - snow_sfc) * 
-     &          abs(uwind_grid(i,j)) /
-     &          sqrt(uwind_grid(i,j)**2 + vwind_grid(i,j)**2)
-              snow_d(i,j) = snow_d(i,j) - snow_d_extra
+            if (snow_d1(i,j).gt.snow_sfc) then
+              snow_d_extra = (snow_d1(i,j) - snow_sfc) * weight_u(i,j)
+              snow_d1(i,j) = snow_d1(i,j) - snow_d_extra
               if (i.lt.nx) then
-                snow_d(i+1,j) = snow_d(i+1,j) + snow_d_extra
+                snow_d1(i+1,j) = snow_d1(i+1,j) + snow_d_extra
               else
-                snow_d(i,j) = snow_d(i,j)
+                snow_d1(i,j) = snow_d1(i,j)
               endif
             endif
+
           enddo
         enddo
       enddo
@@ -2185,19 +2356,6 @@ c Consider EASTERLY winds.
           iend = index_ue(j,k*2)
           istart = index_ue(j,k*2+1)-1
           do i=istart,iend,-1
-
-c           if(winddir(i,j).gt.337.5.and.winddir(i,j).le.360.0.or.
-c    &        winddir(i,j).ge.0.0.and.winddir(i,j).le.22.5)then
-c             tabler = tabler_nn(i,j)
-c           elseif(winddir(i,j).gt.22.5.and.winddir(i,j).le.67.5)then
-c             tabler = tabler_ne(i,j)
-c           elseif(winddir(i,j).gt.67.5.and.winddir(i,j).le.112.5)then
-c             tabler = tabler_ee(i,j)
-c           elseif(winddir(i,j).gt.112.5.and.winddir(i,j).le.157.5)then
-c             tabler = tabler_se(i,j)
-c           elseif(winddir(i,j).gt.157.5.and.winddir(i,j).le.202.5)then
-c             tabler = tabler_ss(i,j)
-c           endif
 
             if(tabler_dir.gt.337.5.and.tabler_dir.le.360.0.or.
      &        tabler_dir.ge.0.0.and.tabler_dir.le.22.5)then
@@ -2212,24 +2370,15 @@ c           endif
               tabler = tabler_ss(i,j)
             endif
 
-            if (tabler.eq.-8888.0) then
-              snow_sfc = 0.01
-            elseif (tabler.le.0.0) then
-              snow_sfc = tp_scale * (snow_d_init(i,j) + sum_sprec(i,j))
-              snow_sfc = max(snow_sfc,vegsnowd_xy(i,j))
-            else
-              snow_sfc = max(tabler,vegsnowd_xy(i,j))
-            endif
+            snow_sfc = tabler
 
-            if (snow_d(i,j).gt.snow_sfc) then
-              snow_d_extra = (snow_d(i,j) - snow_sfc) *
-     &          abs(uwind_grid(i,j)) /
-     &          sqrt(uwind_grid(i,j)**2 + vwind_grid(i,j)**2)
-              snow_d(i,j) = snow_d(i,j) - snow_d_extra
+            if (snow_d1(i,j).gt.snow_sfc) then
+              snow_d_extra = (snow_d1(i,j) - snow_sfc) * weight_u(i,j)
+              snow_d1(i,j) = snow_d1(i,j) - snow_d_extra
               if (i.gt.1) then
-                snow_d(i-1,j) = snow_d(i-1,j) + snow_d_extra
+                snow_d1(i-1,j) = snow_d1(i-1,j) + snow_d_extra
               else
-                snow_d(i,j) = snow_d(i,j)
+                snow_d1(i,j) = snow_d1(i,j)
               endif
             endif
           enddo
@@ -2243,18 +2392,6 @@ c Consider SOUTHERLY winds.
           jend = index_vs(i,k*2+1)
           do j=jstart,jend
 
-c           if(winddir(i,j).gt.67.5.and.winddir(i,j).le.112.5)then
-c             tabler = tabler_ee(i,j)
-c           elseif(winddir(i,j).gt.112.5.and.winddir(i,j).le.157.5)then
-c             tabler = tabler_se(i,j)
-c           elseif(winddir(i,j).gt.157.5.and.winddir(i,j).le.202.5)then
-c             tabler = tabler_ss(i,j)
-c           elseif(winddir(i,j).gt.202.5.and.winddir(i,j).le.247.5)then
-c             tabler = tabler_sw(i,j)
-c           elseif(winddir(i,j).gt.247.5.and.winddir(i,j).le.292.5)then
-c             tabler = tabler_ww(i,j)
-c           endif
-
             if(tabler_dir.gt.67.5.and.tabler_dir.le.112.5)then
               tabler = tabler_ee(i,j)
             elseif(tabler_dir.gt.112.5.and.tabler_dir.le.157.5)then
@@ -2267,24 +2404,15 @@ c           endif
               tabler = tabler_ww(i,j)
             endif
 
-            if (tabler.eq.-8888.0) then
-              snow_sfc = 0.01
-            elseif (tabler.le.0.0) then
-              snow_sfc = tp_scale * (snow_d_init(i,j) + sum_sprec(i,j))
-              snow_sfc = max(snow_sfc,vegsnowd_xy(i,j))
-            else
-              snow_sfc = max(tabler,vegsnowd_xy(i,j))
-            endif
+            snow_sfc = tabler
 
-            if (snow_d(i,j).gt.snow_sfc) then
-              snow_d_extra = (snow_d(i,j) - snow_sfc) *
-     &          abs(vwind_grid(i,j)) /
-     &          sqrt(uwind_grid(i,j)**2 + vwind_grid(i,j)**2)
-              snow_d(i,j) = snow_d(i,j) - snow_d_extra
+            if (snow_d2(i,j).gt.snow_sfc) then
+              snow_d_extra = (snow_d2(i,j) - snow_sfc) * weight_v(i,j)
+              snow_d2(i,j) = snow_d2(i,j) - snow_d_extra
               if (j.lt.ny) then
-                snow_d(i,j+1) = snow_d(i,j+1) + snow_d_extra
+                snow_d2(i,j+1) = snow_d2(i,j+1) + snow_d_extra
               else
-                snow_d(i,j) = snow_d(i,j)
+                snow_d2(i,j) = snow_d2(i,j)
               endif
             endif
           enddo
@@ -2297,19 +2425,6 @@ c Consider NORTHERLY winds.
           jend = index_vn(i,k*2)
           jstart = index_vn(i,k*2+1)-1
           do j=jstart,jend,-1
-
-c           if(winddir(i,j).gt.337.5.and.winddir(i,j).le.360.0.or.
-c    &        winddir(i,j).ge.0.0.and.winddir(i,j).le.22.5)then
-c             tabler = tabler_nn(i,j)
-c           elseif(winddir(i,j).gt.22.5.and.winddir(i,j).le.67.5)then
-c             tabler = tabler_ne(i,j)
-c           elseif(winddir(i,j).gt.67.5.and.winddir(i,j).le.112.5)then
-c             tabler = tabler_ee(i,j)
-c           elseif(winddir(i,j).gt.247.5.and.winddir(i,j).le.292.5)then
-c             tabler = tabler_ww(i,j)
-c           elseif(winddir(i,j).gt.292.5.and.winddir(i,j).le.337.5)then
-c             tabler = tabler_nw(i,j)
-c           endif
 
             if(tabler_dir.gt.337.5.and.tabler_dir.le.360.0.or.
      &        tabler_dir.ge.0.0.and.tabler_dir.le.22.5)then
@@ -2324,27 +2439,27 @@ c           endif
               tabler = tabler_nw(i,j)
             endif
 
-            if (tabler.eq.-8888.0) then
-              snow_sfc = 0.01
-            elseif (tabler.le.0.0) then
-              snow_sfc = tp_scale * (snow_d_init(i,j) + sum_sprec(i,j))
-              snow_sfc = max(snow_sfc,vegsnowd_xy(i,j))
-            else
-              snow_sfc = max(tabler,vegsnowd_xy(i,j))
-            endif
+            snow_sfc = tabler
 
-            if (snow_d(i,j).gt.snow_sfc) then
-              snow_d_extra = (snow_d(i,j) - snow_sfc) *
-     &          abs(vwind_grid(i,j)) /
-     &          sqrt(uwind_grid(i,j)**2 + vwind_grid(i,j)**2)
-              snow_d(i,j) = snow_d(i,j) - snow_d_extra
+            if (snow_d2(i,j).gt.snow_sfc) then
+              snow_d_extra = (snow_d2(i,j) - snow_sfc) * weight_v(i,j)
+              snow_d2(i,j) = snow_d2(i,j) - snow_d_extra
               if (j.gt.1) then
-                snow_d(i,j-1) = snow_d(i,j-1) + snow_d_extra
+                snow_d2(i,j-1) = snow_d2(i,j-1) + snow_d_extra
               else
-                snow_d(i,j) = snow_d(i,j)
+                snow_d2(i,j) = snow_d2(i,j)
               endif
             endif
+
           enddo
+        enddo
+      enddo
+
+c Update the snow depths resulting from these redistributions.
+      do j=1,ny
+        do i=1,nx
+          snow_d(i,j) = snow_d1(i,j) * weight_u(i,j) +
+     &      snow_d2(i,j) * weight_v(i,j)
         enddo
       enddo
 

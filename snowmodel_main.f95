@@ -51,7 +51,7 @@ c Read the input parameters.
      &  lat_solar_flag,UTC_flag,iveg_ht_flag,ihrestart_flag,
      &  ihrestart_inc,i_dataassim_loop,tsls_threshold,dz_snow_min,
      &  print_multilayer,multilayer_snowpack,max_layers,
-     &  multilayer_output_fname,izero_snow_date)
+     &  multilayer_output_fname,izero_snow_date,iprint_stream)
 
 c This loop runs the correction/data assimilation adjustment
 c   iterations.
@@ -230,8 +230,6 @@ c Run the blowing-snow model.
           endif
 
 c Save the outputs from the SNOWPACK and SNOWTRAN routines.
-
-c JPB ADD - modify snowpack.gdat output
           if (run_snowpack.eq.1.0 .and. print_snowpack.eq.1.0) then
             if (mod(iter,iprint_inc).eq.0.0) then
               write(83,rec=iter/iprint_inc)
@@ -243,7 +241,6 @@ c JPB ADD - modify snowpack.gdat output
      &          ((sprec(i,j),i=1,nx),j=1,ny),
      &          ((Qcs(i,j),i=1,nx),j=1,ny),
      &          ((canopy_int(i,j),i=1,nx),j=1,ny),
-     &          ((glacier_melt(i,j),i=1,nx),j=1,ny),
      &          ((sum_Qcs(i,j),i=1,nx),j=1,ny),
      &          ((sum_prec(i,j),i=1,nx),j=1,ny),
      &          ((sum_sprec(i,j),i=1,nx),j=1,ny),
@@ -251,7 +248,6 @@ c JPB ADD - modify snowpack.gdat output
      &          ((sum_runoff(i,j),i=1,nx),j=1,ny),
      &          ((sum_swemelt(i,j),i=1,nx),j=1,ny),
      &          ((sum_sfcsublim(i,j),i=1,nx),j=1,ny),
-     &          ((sum_glacmelt(i,j),i=1,nx),j=1,ny),
      &          ((w_balance(i,j),i=1,nx),j=1,ny)
             endif
           endif
@@ -305,7 +301,8 @@ c   grid cells, saving each data arrays to individual files, etc.
      &        wbal_subgrid,canopy_unload,sum_qsubl,sum_trans,
      &        sum_unload,sum_glacmelt,glacier_melt,swemelt,
      &        iprint_inc,sfc_pressure,sum_swemelt,albedo,
-     &        icorr_factor_loop,swesublim,vegtype,iter_start)
+     &        icorr_factor_loop,swesublim,vegtype,iter_start,
+     &        iprint_stream)
           endif
 
 c For multi-year simulations, sometimes it is desirable to zero

@@ -186,6 +186,9 @@ c Data assimilaion (precipitation and melt) factor variables.
      & i_dataassim_loop,i_corr_start
 c End data assimilaion (precipitation and melt) factor variables.
 
+c AAA new variables
+
+      integer iprint_stream 
 ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
