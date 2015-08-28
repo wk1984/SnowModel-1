@@ -482,6 +482,9 @@ c Do the snowpack and canopy store.
      &  glacier_melt - swesublim + canopy_int_old - canopy_int +
      &  Qcs
 
+c AAA
+c Kilroy: should disable using some verbose or not flag
+c 
 c      if (abs(w_balance).gt.1.0e-5)
 c     &  print*,'water imbalance found, iter =',iter,' ',w_balance
 
@@ -532,8 +535,8 @@ c   simulation includes SnowTran-3D.
      &  swe_depth + sum_glacmelt + snow_d_init * ro_snow/ro_water -
      &  sum_sfcsublim
 
-c      if (abs(w_balance).gt.1.0e-4)
-c     &  print*,'water imbalance found, iter =',iter,' ',w_balance
+      if (abs(w_balance).gt.1.0e-4)
+     &  print*,'water imbalance found, iter =',iter,' ',w_balance
 
       return
       end

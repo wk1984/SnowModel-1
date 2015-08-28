@@ -385,11 +385,11 @@ c   snow-water-equivalent per time step.
 
 c JPB add (6/29/2015) - add linear ramp function for rain/snow
 c uses scheme F from Feiccabrini and Lundberg (2009)
-          if (Tair_grid(i,j).le.(-2.0+Tf)) then
+          if (Tair_grid(i,j).le.(0.0+Tf)) then
             sprec(i,j) = prec_grid(i,j)
-          elseif (Tair_grid(i,j).gt.(-2.0+Tf).and.
-     &      Tair_grid(i,j).le.(4.0+Tf)) then     
-            sprec(i,j) = (0.167*(277.16-Tair_grid(i,j)))*prec_grid(i,j)       
+          elseif (Tair_grid(i,j).gt.(0.0+Tf).and.
+     &      Tair_grid(i,j).le.(2.0+Tf)) then     
+            sprec(i,j) = (0.5*(275.16-Tair_grid(i,j)))*prec_grid(i,j)       
           else      
             sprec(i,j) = 0.0		
 c JPB add (6/29/2015) - add linear ramp function for rain/snow
@@ -589,7 +589,8 @@ c   calculates the instantaneous incoming solar radiation, so
 c   if the time step is very long, account for this by calculating
 c   the incoming solar radiation every 3 hours and then taking the
 c   average.
-          if (dt.le.10800.0) then
+c JPB add - change from 10800 to 21600
+          if (dt.le.21600.0) then
             call solar_rad(Qsi_grid(i,j),J_day,xlat_grid(i,j),
      &        cloud_frac,xhour,slope_az(i,j),terrain_slope(i,j),
      &        UTC_flag,xlon_grid(i,j))
@@ -1912,7 +1913,7 @@ c      data lapse_rate_user /7.8,7.0,7.1,4.7,3.3,3.3,
 c     &                      3.6,3.7,4.7,5.5,7.2,6.5/
 
 c JPB add - values from local domain PRISM data used in model calibration
-      data lapse_rate_user /2.4,2.8,3.7,5.3,5.6,5.6,
+	  data lapse_rate_user /2.4,2.8,3.7,5.3,5.6,5.6,
      &                      5.6,5.0,5.0,4.3,2.8,2.5/
 c JPB add - values from local domain PRISM data used in model calibration
 
@@ -1945,8 +1946,8 @@ c If you want to use the 'user' array, put your monthly values in
 c   here and set iprecip_lapse_rate_user_flag = 1 in the .par file.
 
 c JPB add - values from local domain PRISM data used in model calibration
-      data precip_lapse_rate_user /0.15,0.15,0.13,0.10,0.10,0.10,
-     &                             0.13,0.15,0.18,0.18,0.15,0.15/
+      data precip_lapse_rate_user /0.30,0.30,0.25,0.20,0.20,0.20,
+     &                             0.25,0.30,0.35,0.35,0.30,0.30/
 c JPB add - values from local domain PRISM data used in model calibration
 
 c Air and dewpoint temperature.

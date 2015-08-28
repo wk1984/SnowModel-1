@@ -135,17 +135,17 @@ c Open individual output files for each variable.
       if (iter.eq.iter_start) then
         if (icorr_factor_loop.eq.1) then
           if (iprint_stream.eq.1) then  
-            open (228,file='outputs/wo_assim/prec.dat',
+            open (228,file='/datadrive/SnowModel/prec.dat',
      &        STATUS='NEW', access='STREAM')
-            open (232,file='outputs/wo_assim/ssub.dat',
+            open (232,file='/datadrive/SnowModel/ssub.dat',
      &        STATUS='NEW', access='STREAM')
-            open (233,file='outputs/wo_assim/roff.dat',
+            open (233,file='/datadrive/SnowModel/roff.dat',
      &        STATUS='NEW', access='STREAM')
-            open (236,file='outputs/wo_assim/swed.dat',
+            open (236,file='/datadrive/SnowModel/swed.dat',
      &        STATUS='NEW', access='STREAM')
-            open (241,file='outputs/wo_assim/csub.dat',
+            open (241,file='/datadrive/SnowModel/csub.dat',
      &        STATUS='NEW', access='STREAM')
-            open (245,file='outputs/wo_assim/wbal.dat',
+            open (245,file='/datadrive/SnowModel/wbal.dat',
      &        STATUS='NEW', access='STREAM')
           else
 
@@ -254,7 +254,7 @@ c   averaging, set naverage = 0
 
 c iprint_inc2 = 24 says that you are only going to save the data
 c   every 24 time steps.
-      iprint_inc2 = 8
+      iprint_inc2 = 4
 
       if (naverage.eq.1) then
         if (iter.eq.iter_start) then
